@@ -12,7 +12,7 @@
               type="text"
               v-model="wordInputs[index]"
               placeholder="Enter a word"
-              required
+              :required="index === 0"
               @blur="onInputBlur(index)"
             />
             <button 
@@ -29,6 +29,14 @@
           </div>
           <div class="form-controls">
             <button type="submit" :disabled="!hasValidWords">Start Game</button>
+            <button type="button" class="clear-btn" @click="clearSavedWords">Clear Words</button>
+          </div>
+          <div class="easy-mode-container">
+            <label class="easy-mode-toggle">
+              <input type="checkbox" v-model="isEasyMode">
+              <span>Easy Mode</span>
+              <div class="tooltip">Shows the exact number of letters in the word while guessing</div>
+            </label>
           </div>
         </div>
       </form>
@@ -36,7 +44,15 @@
 
     <!-- Game Screen -->
     <div v-else-if="gameState === 'playing'" class="game-container">
-      <div class="score-display">Score: {{ score }}</div>
+      <div class="game-header">
+        <div class="score-display">Score: {{ score }}</div>
+        <button class="exit-btn" @click="exitGame">Exit Game</button>
+      </div>
+      
+      <div class="progress-bar">
+        <div class="progress-fill" :style="{ width: `${((totalWords - wordsList.length) / totalWords) * 100}%` }"></div>
+        <div class="progress-text">Word {{ totalWords - wordsList.length }} of {{ totalWords }}</div>
+      </div>
       
       <div class="attempts">
         <div
@@ -56,18 +72,17 @@
       <div class="word-display" v-if="showWord">{{ currentWord }}</div>
       <div class="word-display" v-else>🔊</div>
       
-      <form @submit.prevent="checkAnswer">
-        <input
-          type="text"
-          v-model="userInput"
-          placeholder="Type what you hear"
-          ref="answerInput"
-          autocomplete="off"
-          :disabled="gameState !== 'playing'"
+      <form @submit.prevent="checkAnswer" class="letter-form" @keydown="handleKeyPress">
+        <LetterInput
+          :maxLength="currentWord.length"
+          :isDisabled="gameState !== 'playing'"
+          :isEasyMode="isEasyMode"
+          @input="handleLetterInput"
+          ref="letterInput"
         />
         <div class="form-buttons">
           <button type="button" @click="speakCurrentWord">Hear Word</button>
-          <button type="submit">Check</button>
+          <button type="submit">Check Word</button>
         </div>
       </form>
       
@@ -75,8 +90,7 @@
         {{ feedback }}
       </div>
       
-      <button v-if="wordsList.length > 0" @click="goToNextWord">Next Word</button>
-      <button v-else @click="resetGame">Play Again</button>
+      <button v-if="wordsList.length === 0" @click="resetGame">Play Again</button>
     </div>
 
     <!-- Game Over Screen -->
@@ -90,8 +104,13 @@
 
 <script>
 import axios from 'axios';
+import LetterInput from './components/LetterInput.vue';
 
 export default {
+  name: 'App',
+  components: {
+    LetterInput
+  },
   mounted() {
     console.log('App mounted, audio element ready');
     
@@ -113,8 +132,9 @@ export default {
   data() {
     return {
       gameState: 'setup',
-      wordInputs: [''],
+      wordInputs: [localStorage.getItem('savedWords') ? JSON.parse(localStorage.getItem('savedWords'))[0] || '' : ''],
       wordsList: [],
+      totalWords: 0,
       currentWord: '',
       userInput: '',
       currentAttempt: 1,
@@ -124,12 +144,16 @@ export default {
       lastAttemptSuccess: false,
       showWord: false,
       startTime: null,
-      apiBaseUrl: 'http://localhost:8000'
+      apiBaseUrl: 'http://localhost:8000',
+      isEasyMode: false
     };
   },
   computed: {
     hasValidWords() {
       return this.wordInputs.some(word => word.trim() !== '');
+    },
+    savedWords() {
+      return localStorage.getItem('savedWords') ? JSON.parse(localStorage.getItem('savedWords')) : [];
     }
   },
   methods: {
@@ -139,6 +163,7 @@ export default {
     
     removeWordInput(index) {
       this.wordInputs.splice(index, 1);
+      this.saveWords();
     },
     
     onInputBlur(index) {
@@ -154,7 +179,21 @@ export default {
           }
         });
       }
+      this.saveWords();
     },
+
+    saveWords() {
+      const validWords = this.wordInputs.filter(word => word.trim() !== '');
+      localStorage.setItem('savedWords', JSON.stringify(validWords));
+    },
+
+    clearSavedWords() {
+      if (confirm('Are you sure you want to clear all saved words?')) {
+        localStorage.removeItem('savedWords');
+        this.wordInputs = [''];
+      }
+    },
+    
     async startGame() {
       // Filter out empty inputs
       const words = this.wordInputs.filter(word => word.trim() !== '');
@@ -176,6 +215,7 @@ export default {
         
         // Initialize the game
         this.wordsList = [...words];
+        this.totalWords = words.length;
         this.gameState = 'playing';
         this.getNextWord();
       } catch (error) {
@@ -206,19 +246,21 @@ export default {
         this.showWord = false;
         this.startTime = Date.now();
         
+        // Clear the letter input
+        this.$nextTick(() => {
+          if (this.$refs.letterInput) {
+            console.log('Clearing letter input');
+            this.$refs.letterInput.clear();
+            this.$refs.letterInput.focus();
+          }
+          this.playWordAudio(true);
+        });
+        
         // Remove the word from the list to avoid repetition
         const index = this.wordsList.indexOf(this.currentWord);
         if (index !== -1) {
           this.wordsList.splice(index, 1);
         }
-        
-        // Focus on the input and speak the word
-        this.$nextTick(() => {
-          if (this.$refs.answerInput) {
-            this.$refs.answerInput.focus();
-          }
-          this.playWordAudio(true);
-        });
       } catch (error) {
         console.error('Error getting word:', error);
         if (error.code === 'ECONNABORTED') {
@@ -236,6 +278,12 @@ export default {
     speakCurrentWord() {
       // This is now just a handler for the button click
       this.playWordAudio(true);
+      // Refocus the input after clicking the button
+      this.$nextTick(() => {
+        if (this.$refs.letterInput) {
+          this.$refs.letterInput.focus();
+        }
+      });
     },
     
     playWordAudio(withPrompt = true) {
@@ -357,7 +405,7 @@ export default {
         } else {
           // Move to next word automatically after delay
           setTimeout(() => {
-            this.goToNextWord();
+            this.getNextWord();
           }, 1500);
         }
       } else {
@@ -371,6 +419,15 @@ export default {
           this.feedback = `Sorry, the correct spelling is "${this.currentWord}"`;
           this.showWord = true;
           this.score = Math.max(0, this.score - 5); // Penalty for failing all attempts
+          
+          // Move to next word automatically after delay
+          setTimeout(() => {
+            if (this.wordsList.length > 0) {
+              this.getNextWord();
+            } else {
+              this.gameState = 'gameover';
+            }
+          }, 2000);
         } else {
           this.feedback = `Try again! Attempt ${this.currentAttempt} of ${this.maxAttempts}`;
           this.userInput = '';
@@ -379,8 +436,9 @@ export default {
           this.playErrorSound();
           
           setTimeout(() => {
-            if (this.$refs.answerInput) {
-              this.$refs.answerInput.focus();
+            if (this.$refs.letterInput) {
+              this.$refs.letterInput.clear();
+              this.$refs.letterInput.focus();
             }
             // Speak the word again without the prompt
             setTimeout(() => {
@@ -395,31 +453,64 @@ export default {
     },
     resetGame() {
       this.gameState = 'setup';
-      this.wordInputs = [''];
+      // Don't clear wordInputs here to preserve the list
       this.wordsList = [];
       this.currentWord = '';
       this.userInput = '';
       this.currentAttempt = 1;
       this.score = 0;
       this.feedback = '';
+    },
+    exitGame() {
+      if (confirm('Are you sure you want to exit the game? Your progress will be lost.')) {
+        this.resetGame();
+      }
+    },
+    handleLetterInput(value) {
+      console.log('Letter input received:', value);
+      this.userInput = value;
+    },
+    handleKeyPress(event) {
+      if (event.key === 'Enter' && this.gameState === 'playing') {
+        this.checkAnswer();
+      }
     }
   }
 };
 </script>
 
 <style scoped>
-.form-controls {
-  display: flex;
-  gap: 1rem;
-  margin-top: 1rem;
+.container {
+  max-width: 100%;
+  padding: 2rem;
+  margin: 0 auto;
+}
+
+.game-container {
+  width: 100%;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 1rem;
 }
 
 form {
   display: flex;
   flex-direction: column;
   width: 100%;
-  max-width: 500px;
+  max-width: 100%;
   margin: 0 auto;
+}
+
+.letter-form {
+  width: 100%;
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+.form-controls {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1rem;
 }
 
 form button {
@@ -493,5 +584,67 @@ input {
 .delete-btn:focus {
   outline: none;
   box-shadow: 0 0 0 2px rgba(244, 67, 54, 0.2);
+}
+
+.start-controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.easy-mode-container {
+  margin-top: 1rem;
+  text-align: center;
+}
+
+.easy-mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+}
+
+.easy-mode-toggle input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+}
+
+.easy-mode-toggle span {
+  font-size: 0.9rem;
+  color: var(--text-color);
+}
+
+.tooltip {
+  visibility: hidden;
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.5rem;
+  background-color: rgba(0, 0, 0, 0.8);
+  color: white;
+  text-align: center;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  margin-bottom: 0.5rem;
+  z-index: 1;
+}
+
+.tooltip::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  margin-left: -5px;
+  border-width: 5px;
+  border-style: solid;
+  border-color: rgba(0, 0, 0, 0.8) transparent transparent transparent;
+}
+
+.easy-mode-toggle:hover .tooltip {
+  visibility: visible;
 }
 </style>
