@@ -77,6 +77,51 @@ input:focus {
   align-items: center;
 }
 
+.game-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  margin-bottom: 1rem;
+}
+
+.exit-btn {
+  background-color: var(--error-color);
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+}
+
+.exit-btn:hover {
+  background-color: #d32f2f;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 20px;
+  background-color: #e0e0e0;
+  border-radius: 10px;
+  margin-bottom: 1rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background-color: var(--primary-color);
+  transition: width 0.3s ease;
+}
+
+.progress-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--text-color);
+  font-size: 0.8rem;
+  font-weight: bold;
+  text-shadow: 0 0 2px white;
+}
+
 .word-display {
   font-size: 4rem;
   margin: 2rem 0;
@@ -170,4 +215,26 @@ input:focus {
 
 .shake {
   animation: shake 0.5s;
+}
+
+.form-controls {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.clear-btn {
+  background-color: var(--error-color);
+}
+
+.clear-btn:hover {
+  background-color: #d32f2f;
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 500px;
+  margin: 0 auto;
 }
