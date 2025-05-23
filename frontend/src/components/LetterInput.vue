@@ -11,7 +11,10 @@
           v-for="(letter, index) in letterSlots" 
           :key="index"
           class="letter-slot"
-          :class="{ 'filled': letter !== '' }"
+          :class="{ 
+            'filled': letter !== '',
+            'incorrect': showIncorrect && letter !== '' && letter !== correctWord[index]
+          }"
         >
           <svg 
             v-if="letter !== ''"
@@ -74,12 +77,17 @@ export default {
     isEasyMode: {
       type: Boolean,
       default: false
+    },
+    correctWord: {
+      type: String,
+      default: ''
     }
   },
   data() {
     return {
       currentLetters: [],
-      letterSlots: Array(this.maxLength).fill('')
+      letterSlots: Array(this.maxLength).fill(''),
+      showIncorrect: false
     }
   },
   mounted() {
@@ -148,6 +156,20 @@ export default {
       }
       this.$emit('input', '');
       console.log('Cleared letters');
+      this.$nextTick(() => {
+        this.focus();
+      });
+    },
+    showIncorrectLetters() {
+      if (this.isEasyMode) {
+        this.showIncorrect = true;
+        setTimeout(() => {
+          this.showIncorrect = false;
+          this.clear();
+        }, 1000);
+      } else {
+        this.clear();
+      }
     },
     focus() {
       console.log('Focusing letter input');
@@ -242,5 +264,16 @@ export default {
   .letter-text {
     font-size: 36px;
   }
+}
+
+.letter-slot.incorrect {
+  background-color: var(--error-color);
+  animation: shake 0.5s;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
 }
 </style> 

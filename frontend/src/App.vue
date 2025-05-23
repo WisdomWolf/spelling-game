@@ -1,5 +1,14 @@
 <template>
   <div class="container">
+    <div class="theme-toggle">
+      <button 
+        class="theme-btn" 
+        @click="toggleTheme" 
+        :title="isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'"
+      >
+        {{ isDarkMode ? '🌞' : '🌙' }}
+      </button>
+    </div>
     <h1 class="game-title">Spelling Master</h1>
 
     <!-- Word Input Form -->
@@ -28,15 +37,17 @@
             <div v-if="index === 0" class="delete-btn-placeholder"></div>
           </div>
           <div class="form-controls">
-            <button type="submit" :disabled="!hasValidWords">Start Game</button>
+            <div class="start-controls">
+              <button type="submit" :disabled="!hasValidWords">Start Game</button>
+              <div class="easy-mode-container">
+                <label class="easy-mode-toggle">
+                  <input type="checkbox" v-model="isEasyMode">
+                  <span class="toggle-label">Easy Mode</span>
+                  <div class="tooltip">Shows the exact number of letters in the word while guessing</div>
+                </label>
+              </div>
+            </div>
             <button type="button" class="clear-btn" @click="clearSavedWords">Clear Words</button>
-          </div>
-          <div class="easy-mode-container">
-            <label class="easy-mode-toggle">
-              <input type="checkbox" v-model="isEasyMode">
-              <span>Easy Mode</span>
-              <div class="tooltip">Shows the exact number of letters in the word while guessing</div>
-            </label>
           </div>
         </div>
       </form>
@@ -77,6 +88,7 @@
           :maxLength="currentWord.length"
           :isDisabled="gameState !== 'playing'"
           :isEasyMode="isEasyMode"
+          :correctWord="currentWord"
           @input="handleLetterInput"
           ref="letterInput"
         />
@@ -90,7 +102,7 @@
         {{ feedback }}
       </div>
       
-      <button v-if="wordsList.length === 0" @click="resetGame">Play Again</button>
+      <button v-if="gameState === 'gameover'" @click="resetGame">Play Again</button>
     </div>
 
     <!-- Game Over Screen -->
@@ -113,6 +125,7 @@ export default {
   },
   mounted() {
     console.log('App mounted, audio element ready');
+    this.applyTheme();
     
     // Test that audio API is working
     setTimeout(() => {
@@ -145,7 +158,9 @@ export default {
       showWord: false,
       startTime: null,
       apiBaseUrl: 'http://localhost:8000',
-      isEasyMode: false
+      isEasyMode: false,
+      isDarkMode: localStorage.getItem('darkMode') === 'true',
+      isAudioPlaying: false
     };
   },
   computed: {
@@ -157,6 +172,14 @@ export default {
     }
   },
   methods: {
+    toggleTheme() {
+      this.isDarkMode = !this.isDarkMode;
+      localStorage.setItem('darkMode', this.isDarkMode);
+      this.applyTheme();
+    },
+    applyTheme() {
+      document.documentElement.setAttribute('data-theme', this.isDarkMode ? 'dark' : 'light');
+    },
     addWordInput() {
       this.wordInputs.push('');
     },
@@ -292,6 +315,12 @@ export default {
       // Don't show the word when intentionally speaking it
       this.showWord = false;
       
+      // If audio is already playing, ignore the request
+      if (this.isAudioPlaying) {
+        console.log('Audio already playing, ignoring request');
+        return;
+      }
+      
       // Create a new Audio object each time (more reliable than reusing)
       const audio = new Audio();
       
@@ -299,14 +328,17 @@ export default {
       audio.addEventListener('error', () => {
         console.error('Audio playback error');
         this.showWord = true; // Show the word if audio fails
+        this.isAudioPlaying = false;
       });
       
       audio.addEventListener('play', () => {
         console.log('Audio playback started');
+        this.isAudioPlaying = true;
       });
       
       audio.addEventListener('ended', () => {
         console.log('Audio playback ended');
+        this.isAudioPlaying = false;
       });
       
       // Generate a unique timestamp to prevent caching
@@ -319,6 +351,7 @@ export default {
       audio.play().catch(error => {
         console.error('Error playing audio:', error);
         this.showWord = true;
+        this.isAudioPlaying = false;
       });
     },
     
@@ -430,14 +463,17 @@ export default {
           }, 2000);
         } else {
           this.feedback = `Try again! Attempt ${this.currentAttempt} of ${this.maxAttempts}`;
-          this.userInput = '';
+          
+          // Show incorrect letters in easy mode before clearing
+          if (this.$refs.letterInput) {
+            this.$refs.letterInput.showIncorrectLetters();
+          }
           
           // Play error sound and repeat the word
           this.playErrorSound();
           
           setTimeout(() => {
             if (this.$refs.letterInput) {
-              this.$refs.letterInput.clear();
               this.$refs.letterInput.focus();
             }
             // Speak the word again without the prompt
@@ -509,7 +545,8 @@ form {
 
 .form-controls {
   display: flex;
-  gap: 1rem;
+  justify-content: space-between;
+  align-items: flex-start;
   margin-top: 1rem;
 }
 
@@ -588,49 +625,65 @@ input {
 
 .start-controls {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 1rem;
+  gap: 0.5rem;
 }
 
 .easy-mode-container {
-  margin-top: 1rem;
+  margin: 0;
   text-align: center;
 }
 
 .easy-mode-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.75rem;
   cursor: pointer;
   user-select: none;
   position: relative;
+  padding: 0.5rem;
+  border-radius: 8px;
+  transition: background-color 0.3s ease;
+}
+
+.easy-mode-toggle:hover {
+  background-color: var(--shadow-color);
 }
 
 .easy-mode-toggle input[type="checkbox"] {
   margin: 0;
   cursor: pointer;
+  width: 20px;
+  height: 20px;
+  accent-color: var(--primary-color);
 }
 
-.easy-mode-toggle span {
-  font-size: 0.9rem;
+.toggle-label {
+  font-size: 1rem;
   color: var(--text-color);
+  font-weight: 500;
 }
 
 .tooltip {
-  visibility: hidden;
   position: absolute;
   bottom: 100%;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translateX(-50%) translateY(10px);
   padding: 0.5rem;
-  background-color: rgba(0, 0, 0, 0.8);
-  color: white;
+  background-color: var(--container-background);
+  color: var(--text-color);
   text-align: center;
   border-radius: 4px;
   font-size: 0.8rem;
   white-space: nowrap;
   margin-bottom: 0.5rem;
   z-index: 1;
+  box-shadow: 0 2px 8px var(--shadow-color);
+  border: 1px solid var(--border-color);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
 .tooltip::after {
@@ -641,10 +694,38 @@ input {
   margin-left: -5px;
   border-width: 5px;
   border-style: solid;
-  border-color: rgba(0, 0, 0, 0.8) transparent transparent transparent;
+  border-color: var(--border-color) transparent transparent transparent;
 }
 
 .easy-mode-toggle:hover .tooltip {
-  visibility: visible;
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+  transition-delay: 0.3s;
+}
+
+.theme-toggle {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 1000;
+}
+
+.theme-btn {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.3s ease;
+}
+
+.theme-btn:hover {
+  background-color: var(--shadow-color);
 }
 </style>
