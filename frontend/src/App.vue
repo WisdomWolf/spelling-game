@@ -47,7 +47,10 @@
                 </label>
               </div>
             </div>
-            <button type="button" class="clear-btn" @click="clearSavedWords">Clear Words</button>
+            <div class="secondary-controls">
+              <button type="button" class="clear-btn" @click="clearSavedWords">Clear Words</button>
+              <button type="button" class="high-scores-btn" @click="showHighScores = true">High Scores</button>
+            </div>
           </div>
         </div>
       </form>
@@ -111,17 +114,36 @@
       <div class="score-display">Final Score: {{ score }}</div>
       <button @click="resetGame">Play Again</button>
     </div>
+
+    <!-- High Score Components -->
+    <HighScoresModal
+      :show="showHighScores"
+      :scores="highScores"
+      @close="showHighScores = false"
+    />
+    
+    <HighScoreInput
+      :show="showHighScoreInput"
+      :score="score"
+      :wordCount="totalWords"
+      @close="showHighScoreInput = false"
+      @submit="submitHighScore"
+    />
   </div>
 </template>
 
 <script>
 import axios from 'axios';
 import LetterInput from './components/LetterInput.vue';
+import HighScoresModal from './components/HighScoresModal.vue';
+import HighScoreInput from './components/HighScoreInput.vue';
 
 export default {
   name: 'App',
   components: {
-    LetterInput
+    LetterInput,
+    HighScoresModal,
+    HighScoreInput
   },
   mounted() {
     console.log('App mounted, audio element ready');
@@ -160,7 +182,11 @@ export default {
       apiBaseUrl: 'http://localhost:8000',
       isEasyMode: false,
       isDarkMode: localStorage.getItem('darkMode') === 'true',
-      isAudioPlaying: false
+      isAudioPlaying: false,
+      showHighScores: false,
+      showHighScoreInput: false,
+      highScores: [],
+      isNewHighScore: false
     };
   },
   computed: {
@@ -241,6 +267,7 @@ export default {
         this.totalWords = words.length;
         this.gameState = 'playing';
         this.getNextWord();
+        await this.loadHighScores();
       } catch (error) {
         console.error('Error starting game:', error);
         if (error.code === 'ECONNABORTED') {
@@ -434,6 +461,7 @@ export default {
         if (this.wordsList.length === 0) {
           setTimeout(() => {
             this.gameState = 'gameover';
+            this.checkIfHighScore();
           }, 1500);
         } else {
           // Move to next word automatically after delay
@@ -459,6 +487,7 @@ export default {
               this.getNextWord();
             } else {
               this.gameState = 'gameover';
+              this.checkIfHighScore();
             }
           }, 2000);
         } else {
@@ -487,7 +516,7 @@ export default {
     goToNextWord() {
       this.getNextWord();
     },
-    resetGame() {
+    async resetGame() {
       this.gameState = 'setup';
       // Don't clear wordInputs here to preserve the list
       this.wordsList = [];
@@ -496,6 +525,8 @@ export default {
       this.currentAttempt = 1;
       this.score = 0;
       this.feedback = '';
+      this.isNewHighScore = false;
+      await this.loadHighScores();
     },
     exitGame() {
       if (confirm('Are you sure you want to exit the game? Your progress will be lost.')) {
@@ -509,6 +540,63 @@ export default {
     handleKeyPress(event) {
       if (event.key === 'Enter' && this.gameState === 'playing') {
         this.checkAnswer();
+      }
+    },
+    async loadHighScores() {
+      try {
+        console.log('Loading high scores...');
+        const response = await axios.get(`${this.apiBaseUrl}/high-scores`);
+        console.log('High scores loaded:', response.data.scores);
+        this.highScores = response.data.scores;
+      } catch (error) {
+        console.error('Error loading high scores:', error);
+        this.highScores = [];
+      }
+    },
+    
+    async submitHighScore(scoreData) {
+      try {
+        // Transform the data to match the backend model exactly
+        const transformedData = {
+          name: scoreData.name.trim(),
+          score: parseInt(scoreData.score),
+          word_count: parseInt(scoreData.wordCount),
+          date: new Date().toISOString()
+        };
+        
+        console.log('Submitting high score:', transformedData);
+        const response = await axios.post(`${this.apiBaseUrl}/high-scores`, transformedData);
+        console.log('High score submission response:', response.data);
+        
+        // Show success feedback
+        this.feedback = 'High score saved!';
+        this.lastAttemptSuccess = true;
+        
+        // Reload high scores
+        await this.loadHighScores();
+        
+        // Close the input modal and show high scores
+        this.showHighScoreInput = false;
+        this.showHighScores = true;
+        
+        // Return to start screen after a short delay
+        setTimeout(() => {
+          this.resetGame();
+        }, 2000);
+      } catch (error) {
+        console.error('Error submitting high score:', error);
+        this.feedback = 'Failed to save high score. Please try again.';
+        this.lastAttemptSuccess = false;
+      }
+    },
+    
+    checkIfHighScore() {
+      if (this.highScores.length < 10 || this.score > this.highScores[this.highScores.length - 1].score) {
+        console.log('New high score achieved!');
+        this.isNewHighScore = true;
+        this.showHighScoreInput = true;
+      } else {
+        console.log('Not a high score');
       }
     }
   }
@@ -727,5 +815,18 @@ input {
 
 .theme-btn:hover {
   background-color: var(--shadow-color);
+}
+
+.secondary-controls {
+  display: flex;
+  gap: 1rem;
+}
+
+.high-scores-btn {
+  background-color: var(--secondary-color);
+}
+
+.high-scores-btn:hover {
+  background-color: var(--primary-color);
 }
 </style>

@@ -5,8 +5,10 @@ from pydantic import BaseModel
 import random
 import os
 import tempfile
-from typing import List
+from typing import List, Optional
 from gtts import gTTS
+import json
+from datetime import datetime
 
 app = FastAPI()
 
@@ -23,8 +25,33 @@ app.add_middleware(
 words = []
 used_words = []
 
+# Initialize game state
+game_state = {
+    "words": [],
+    "current_word_index": 0
+}
+
+# High scores file path
+HIGH_SCORES_FILE = "high_scores.json"
+
 class WordList(BaseModel):
     words: List[str]
+
+class HighScore(BaseModel):
+    name: str
+    score: int
+    date: str
+    word_count: int
+
+def load_high_scores():
+    if os.path.exists(HIGH_SCORES_FILE):
+        with open(HIGH_SCORES_FILE, 'r') as f:
+            return json.load(f)
+    return []
+
+def save_high_scores(scores):
+    with open(HIGH_SCORES_FILE, 'w') as f:
+        json.dump(scores, f)
 
 @app.post("/words")
 async def add_words(word_list: WordList):
@@ -101,6 +128,22 @@ async def get_audio(text: str, prompt: bool = True, t: str = None):
     except Exception as e:
         print(f"Error generating audio: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to generate audio: {str(e)}")
+
+@app.post("/high-scores")
+async def add_high_score(score: HighScore):
+    scores = load_high_scores()
+    scores.append(score.dict())
+    # Sort by score in descending order
+    scores.sort(key=lambda x: x['score'], reverse=True)
+    # Keep only top 10 scores
+    scores = scores[:10]
+    save_high_scores(scores)
+    return {"message": "High score added successfully"}
+
+@app.get("/high-scores")
+async def get_high_scores():
+    scores = load_high_scores()
+    return {"scores": scores}
 
 if __name__ == "__main__":
     import uvicorn
