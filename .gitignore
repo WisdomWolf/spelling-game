@@ -41,6 +41,7 @@ dist-ssr/
 # IDE files
 .idea/
 .vscode/
+.history/
 *.swp
 *.swo
 *.sublime-workspace
