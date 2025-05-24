@@ -83,8 +83,12 @@
         </div>
       </div>
       
-      <div class="word-display" v-if="showWord">{{ currentWord }}</div>
-      <div class="word-display" v-else>🔊</div>
+      <div class="word-display-container">
+        <div v-if="currentImageUrl" class="word-image">
+          <img :src="currentImageUrl" :alt="currentWord" />
+        </div>
+        <div v-else class="word-display">🔊</div>
+      </div>
       
       <form @submit.prevent="checkAnswer" class="letter-form" @keydown="handleKeyPress">
         <LetterInput
@@ -100,6 +104,17 @@
           <button type="submit">Check Word</button>
         </div>
       </form>
+      
+      <div class="example-sentence" v-if="currentExampleSentence">
+        <p>{{ currentExampleSentence.display }}</p>
+        <button 
+          @click="speakExampleSentence" 
+          :disabled="isAudioPlaying"
+          class="hear-sentence-btn"
+        >
+          <i class="fas fa-volume-up"></i> Hear Sentence
+        </button>
+      </div>
       
       <div class="feedback" :class="{ 'success': lastAttemptSuccess, 'error': !lastAttemptSuccess && feedback }">
         {{ feedback }}
@@ -171,6 +186,8 @@ export default {
       wordsList: [],
       totalWords: 0,
       currentWord: '',
+      currentImageUrl: null,
+      currentExampleSentence: null,
       userInput: '',
       currentAttempt: 1,
       maxAttempts: 3,
@@ -290,6 +307,8 @@ export default {
         
         console.log('Received word:', response.data);
         this.currentWord = response.data.word;
+        this.currentImageUrl = response.data.image_url;
+        this.currentExampleSentence = response.data.example_sentence;
         this.userInput = '';
         this.currentAttempt = 1;
         this.feedback = '';
@@ -598,6 +617,41 @@ export default {
       } else {
         console.log('Not a high score');
       }
+    },
+    async speakExampleSentence() {
+      if (!this.currentExampleSentence?.audio || this.isAudioPlaying) return;
+      
+      // Refocus input immediately after clicking the button
+      this.$nextTick(() => {
+        if (this.$refs.letterInput) {
+          this.$refs.letterInput.focus();
+        }
+      });
+      
+      try {
+        console.log('Fetching audio for example sentence:', this.currentExampleSentence.audio);
+        const audio = new Audio(`${this.apiBaseUrl}/audio/${encodeURIComponent(this.currentExampleSentence.audio)}?prompt=false`);
+        
+        audio.addEventListener('error', (e) => {
+          console.error('Error playing audio:', e);
+          this.isAudioPlaying = false;
+        });
+        
+        audio.addEventListener('play', () => {
+          console.log('Audio playback started');
+          this.isAudioPlaying = true;
+        });
+        
+        audio.addEventListener('ended', () => {
+          console.log('Audio playback ended');
+          this.isAudioPlaying = false;
+        });
+        
+        await audio.play();
+      } catch (error) {
+        console.error('Error playing example sentence:', error);
+        this.isAudioPlaying = false;
+      }
     }
   }
 };
@@ -828,5 +882,66 @@ input {
 
 .high-scores-btn:hover {
   background-color: var(--primary-color);
+}
+
+.word-display-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 2rem 0;
+  min-height: 200px;
+  max-height: 300px;
+  width: 100%;
+}
+
+.word-image {
+  max-width: 100%;
+  max-height: 300px;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px var(--shadow-color);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.word-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  max-height: 300px;
+}
+
+.example-sentence {
+  margin: 1.5rem 0;
+  padding: 1rem;
+  background-color: var(--input-background);
+  border-radius: 8px;
+  text-align: center;
+}
+
+.example-sentence p {
+  margin: 0 0 1rem 0;
+  font-style: italic;
+  color: var(--text-color);
+}
+
+.hear-sentence-btn {
+  background-color: var(--secondary-color);
+  color: var(--text-color);
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.hear-sentence-btn:hover:not(:disabled) {
+  background-color: var(--primary-color);
+}
+
+.hear-sentence-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>

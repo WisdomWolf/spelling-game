@@ -11,6 +11,9 @@ fastapi = "^0.115.12"
 uvicorn = "^0.34.2"
 python-multipart = "^0.0.20"
 gtts = "^2.5.4"
+python-dotenv = "^1.1.0"
+openai = "^1.82.0"
+requests = "^2.32.3"
 
 [build-system]
 requires = ["poetry-core"]

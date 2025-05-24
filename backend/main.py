@@ -9,6 +9,11 @@ from typing import List, Optional
 from gtts import gTTS
 import json
 from datetime import datetime
+import requests
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 app = FastAPI()
 
@@ -20,6 +25,16 @@ app.add_middleware(
     allow_methods=["*"],  # Allows all methods
     allow_headers=["*"],  # Allows all headers
 )
+
+# Image API configuration
+IMAGE_API_URL = "https://placehold.co/800x600/2563eb/ffffff"
+
+# Free Dictionary API URL
+DICTIONARY_API_URL = "https://api.dictionaryapi.dev/api/v2/entries/en/"
+
+# Unsplash API configuration
+UNSPLASH_API_URL = "https://api.unsplash.com/search/photos"
+UNSPLASH_ACCESS_KEY = os.getenv('UNSPLASH_ACCESS_KEY')  # This is your Client ID/Access Key
 
 # In-memory storage for words and used words
 words = []
@@ -53,6 +68,90 @@ def save_high_scores(scores):
     with open(HIGH_SCORES_FILE, 'w') as f:
         json.dump(scores, f)
 
+async def get_word_image(word: str) -> Optional[str]:
+    """Fetch an image URL for the given word using Unsplash API."""
+    try:
+        print(f"\nFetching image for word: {word}")
+        
+        if not UNSPLASH_ACCESS_KEY:
+            print("No Unsplash Access Key found. Please set UNSPLASH_ACCESS_KEY in your .env file")
+            return None
+        
+        # Use a simple search query
+        params = {
+            "query": word,
+            "per_page": 1,
+            "orientation": "landscape"
+        }
+        
+        # Make the request
+        response = requests.get(
+            UNSPLASH_API_URL,
+            params=params,
+            headers={
+                "Accept-Version": "v1",
+                "Authorization": f"Client-ID {UNSPLASH_ACCESS_KEY}"
+            }
+        )
+        
+        print(f"Unsplash API response status code: {response.status_code}")
+        
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("results") and len(data["results"]) > 0:
+                # Use the small size URL instead of regular
+                image_url = data["results"][0]["urls"]["small"]
+                print(f"Found image URL: {image_url}")
+                return image_url
+            print("No images found in response")
+        else:
+            print(f"Error response from Unsplash: {response.text}")
+            
+        return None
+    except Exception as e:
+        print(f"Error fetching image for {word}: {str(e)}")
+        return None
+
+async def get_example_sentence(word: str) -> Optional[dict]:
+    """Get an example sentence from the Free Dictionary API and return both masked and unmasked versions."""
+    try:
+        response = requests.get(f"{DICTIONARY_API_URL}{word}")
+        response.raise_for_status()
+        
+        data = response.json()
+        if isinstance(data, list) and len(data) > 0:
+            # Look for example sentences in the definitions
+            for meaning in data[0].get('meanings', []):
+                for definition in meaning.get('definitions', []):
+                    if 'example' in definition:
+                        example = definition['example']
+                        # Remove any quotes and ensure it ends with a period
+                        example = example.strip('"\'')
+                        if not example.endswith('.'):
+                            example += '.'
+                        # Create masked version
+                        masked_example = example.replace(word, '____')
+                        return {
+                            "display": masked_example,
+                            "audio": example
+                        }
+            
+            # If no example found, use the first definition as a fallback
+            for meaning in data[0].get('meanings', []):
+                for definition in meaning.get('definitions', []):
+                    if 'definition' in definition:
+                        display = f"The word '____' means: {definition['definition']}."
+                        audio = f"The word '{word}' means: {definition['definition']}."
+                        return {
+                            "display": display,
+                            "audio": audio
+                        }
+        
+        return None
+    except Exception as e:
+        print(f"Error fetching example sentence for {word}: {e}")
+        return None
+
 @app.post("/words")
 async def add_words(word_list: WordList):
     global words, used_words
@@ -81,7 +180,15 @@ async def get_random_word():
     random_word = random.choice(available_words)
     used_words.append(random_word)
     
-    return {"word": random_word}
+    # Get additional data for the word
+    image_url = await get_word_image(random_word)
+    example_sentence = await get_example_sentence(random_word)
+    
+    return {
+        "word": random_word,
+        "image_url": image_url,
+        "example_sentence": example_sentence
+    }
 
 @app.get("/audio/{text}")
 async def get_audio(text: str, prompt: bool = True, t: str = None):
