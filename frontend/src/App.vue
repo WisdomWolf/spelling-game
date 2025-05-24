@@ -84,7 +84,7 @@
       </div>
       
       <div class="word-display-container">
-        <div v-if="currentImageUrl" class="word-image">
+        <div v-if="currentImageUrl && enableImages" class="word-image">
           <img :src="currentImageUrl" :alt="currentWord" />
         </div>
         <div v-else class="word-display">🔊</div>
@@ -160,9 +160,18 @@ export default {
     HighScoresModal,
     HighScoreInput
   },
-  mounted() {
+  async mounted() {
     console.log('App mounted, audio element ready');
     this.applyTheme();
+    
+    // Get backend configuration
+    try {
+      const response = await axios.get(`${this.apiBaseUrl}/config`);
+      this.enableImages = response.data.enable_images;
+      console.log('Backend configuration loaded:', response.data);
+    } catch (error) {
+      console.error('Error loading backend configuration:', error);
+    }
     
     // Test that audio API is working
     setTimeout(() => {
@@ -203,7 +212,8 @@ export default {
       showHighScores: false,
       showHighScoreInput: false,
       highScores: [],
-      isNewHighScore: false
+      isNewHighScore: false,
+      enableImages: false
     };
   },
   computed: {

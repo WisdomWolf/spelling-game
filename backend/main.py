@@ -11,9 +11,19 @@ import json
 from datetime import datetime
 import requests
 from dotenv import load_dotenv
+import argparse
 
 # Load environment variables
 load_dotenv()
+
+# Parse command line arguments
+parser = argparse.ArgumentParser(description='Spelling Game Backend')
+parser.add_argument('--enable-images', action='store_true', help='Enable image fetching')
+# Allow unknown arguments to pass through to uvicorn
+args, unknown = parser.parse_known_args()
+
+# Image fetching configuration
+ENABLE_IMAGES = os.getenv('ENABLE_IMAGES', 'false').lower() == 'true' or args.enable_images
 
 app = FastAPI()
 
@@ -70,6 +80,10 @@ def save_high_scores(scores):
 
 async def get_word_image(word: str) -> Optional[str]:
     """Fetch an image URL for the given word using Unsplash API."""
+    if not ENABLE_IMAGES:
+        print("Image fetching is disabled")
+        return None
+        
     try:
         print(f"\nFetching image for word: {word}")
         
@@ -251,6 +265,13 @@ async def add_high_score(score: HighScore):
 async def get_high_scores():
     scores = load_high_scores()
     return {"scores": scores}
+
+@app.get("/config")
+async def get_config():
+    """Return the current configuration."""
+    return {
+        "enable_images": ENABLE_IMAGES
+    }
 
 if __name__ == "__main__":
     import uvicorn
