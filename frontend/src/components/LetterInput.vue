@@ -68,7 +68,8 @@ export default {
   props: {
     maxLength: {
       type: Number,
-      required: true
+      required: true,
+      validator: value => value > 0 && value <= 20
     },
     isDisabled: {
       type: Boolean,
@@ -104,6 +105,11 @@ export default {
       } else {
         document.addEventListener('keydown', this.handleKeyPress);
       }
+    },
+    maxLength(newLength) {
+      // Ensure maxLength is between 1 and 20
+      const validLength = Math.min(Math.max(newLength, 1), 20);
+      this.letterSlots = Array(validLength).fill('');
     }
   },
   methods: {
@@ -127,6 +133,11 @@ export default {
             this.$emit('input', this.letterSlots.join(''));
           }
         } else {
+          // In normal mode, only limit to 20 characters
+          if (this.currentLetters.length >= 20) {
+            console.log('Maximum length reached (20 characters)');
+            return;
+          }
           this.currentLetters.push(event.key.toLowerCase());
           this.$emit('input', this.currentLetters.join(''));
         }
